@@ -135,3 +135,6 @@ bin/
 
 pyvenv.cfg
 .DS_Store
+
+# Generated output
+report.html

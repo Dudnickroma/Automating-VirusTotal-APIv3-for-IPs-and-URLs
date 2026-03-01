@@ -8,6 +8,7 @@ import json
 import base64
 import os
 import hashlib
+import webbrowser
 from dotenv import load_dotenv
 
 
@@ -36,8 +37,10 @@ and exposing your API key in the repository
 """
 
 # retrieve API key from .env file and store in a variable
-API_KEY = os.getenv("API_KEY1")
+API_KEY = os.getenv("VT_API_KEY")
 
+# global list to track entries with malicious detections
+malicious_entries = []
 
 # ////////////////////////////////// START Initiate the parser
 
@@ -76,12 +79,19 @@ def urlReport(arg):
     # amend the virustotal apiv3 url to include the unique generated url_id
     url = "https://www.virustotal.com/api/v3/urls/" + url_id
 
-
     # while you can enter your API key directly for the "x-apikey" it's not recommended as a "best practice" and should be stored-accessed separately in a .env file (see comment under "load_dotenv()"" for more information
     headers = {
         "Accept": "application/json",
         "x-apikey": API_KEY
     }
+
+    # submit a re-analysis request before fetching the report
+    # POST to /analyse triggers VirusTotal to rescan the url/ip with all engines
+    reanalyse_url = "https://www.virustotal.com/api/v3/urls/" + url_id + "/analyse"
+    requests.request("POST", reanalyse_url, headers=headers)
+
+    # brief pause to allow VirusTotal to begin processing the re-analysis
+    time.sleep(3)
 
     response = requests.request("GET", url, headers=headers)
 
@@ -156,9 +166,34 @@ def urlReport(arg):
         "html_meta"
         ]
 
+    # grab "malicious" key data from last_analysis_stats to create the first part of the community_score_info
+    # (must be extracted before removing keys below)
+    analysis_stats = decodedResponse["data"]["attributes"]["last_analysis_stats"]
+    community_score = analysis_stats["malicious"]
+
+    # grab the sum of last_analysis_stats to create the total number of security vendors that reviewed the URL for the second half of the community_score_info
+    total_vt_reviewers = analysis_stats["harmless"] + analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["timeout"]
+
+    # extract detailed vendor analysis results before removing them
+    analysis_results = decodedResponse["data"]["attributes"].get("last_analysis_results", {})
+    malicious_vendors = []
+    suspicious_vendors = []
+    
+    for vendor, result in analysis_results.items():
+        category = result.get("category", "")
+        if category == "malicious":
+            malicious_vendors.append(vendor)
+        elif category == "suspicious":
+            suspicious_vendors.append(vendor)
+
     # iterate through the filteredResponse dictionary using the keys_to_remove array and pop to remove additional keys listed in the array
     for key in keys_to_remove:
       filteredResponse.pop(key, None)
+
+    # convert any non-scalar values (lists, dicts) to their string representation for DataFrame compatibility
+    for key in filteredResponse:
+      if isinstance(filteredResponse[key], (list, dict)):
+        filteredResponse[key] = str(filteredResponse[key])
 
     # create a dataframe with the remaining keys stored in the filteredResponse dictionary
     # orient="index" is necessary in order to list the index of attribute keys as rows and not as columns
@@ -166,12 +201,6 @@ def urlReport(arg):
     
     # rename the column header to the submitted url
     dataframe.columns = [target_url]
-
-    # grab "malicious" key data from last_analysis_stats to create the first part of the community_score_info
-    community_score = (decodedResponse["data"]["attributes"]["last_analysis_stats"]["malicious"])
-
-    # grab the sum of last_analysis_stats to create the total number of security vendors that reviewed the URL for the second half of the community_score_info
-    total_vt_reviewers = (decodedResponse["data"]["attributes"]["last_analysis_stats"]["harmless"])+(decodedResponse["data"]["attributes"]["last_analysis_stats"]["malicious"])+(decodedResponse["data"]["attributes"]["last_analysis_stats"]["suspicious"])+(decodedResponse["data"]["attributes"]["last_analysis_stats"]["undetected"])+(decodedResponse["data"]["attributes"]["last_analysis_stats"]["timeout"])
 
     # create a custom community score using community_score and the total_vt_reviewers values
     community_score_info = str(community_score)+ ("/") + str(total_vt_reviewers) + ("  :  security vendors flagged this as malicious")
@@ -184,6 +213,23 @@ def urlReport(arg):
 
     # amend dataframe with the updated last_analysis_date value stored in time_formatted that was converted from epoch to human readable
     dataframe.loc['last_analysis_date',:] = time_formatted
+
+    # add malicious vendors list to dataframe if any exist
+    if malicious_vendors:
+        dataframe.loc['malicious_vendors',:] = ', '.join(malicious_vendors)
+        # track this entry as malicious
+        global malicious_entries
+        malicious_entries.append({
+            'target': target_url,
+            'vendors': malicious_vendors,
+            'count': community_score,
+            'report_link': vt_urlReportLink,
+            'last_analysis_date': time_formatted
+        })
+    
+    # add suspicious vendors list to dataframe if any exist
+    if suspicious_vendors:
+        dataframe.loc['suspicious_vendors',:] = ', '.join(suspicious_vendors)
 
     # sort dataframe index in alphabetical order to put the community score at the top
     dataframe.sort_index(inplace = True)
@@ -204,6 +250,9 @@ def urlReport(arg):
 
 def urlReportLst(arg):
     print("Option 2:")
+    # reset malicious entries tracking for this run
+    global malicious_entries
+    malicious_entries = []
     # open user defined list from file path/name
     with open(arg) as fcontent:
         fstring = fcontent.readlines()
@@ -250,6 +299,9 @@ def urlReportLst(arg):
 def urlReportIPLst(arg):
     # open user defined list from file path/name
     print("Option 3:")
+    # reset malicious entries tracking for this run
+    global malicious_entries
+    malicious_entries = []
     with open(arg) as fh:
         string = fh.readlines()
 
@@ -401,6 +453,34 @@ def outputHTML():
             tr th {
                 padding: 10px 10px 5px 10px;
             }
+            .malicious-summary {
+                background-color: #ffcccc;
+                border: 2px solid #cc0000;
+                padding: 15px;
+                margin: 20px 30px;
+                border-radius: 5px;
+                max-width: 760px;
+            }
+            .malicious-summary h3 {
+                color: #cc0000;
+                margin: 0 0 10px 0;
+                font-weight: bold;
+            }
+            .malicious-summary ul {
+                margin: 0;
+                padding-left: 20px;
+            }
+            .malicious-summary li {
+                margin: 8px 0;
+                color: #1d262e;
+            }
+            .malicious-summary a {
+                color: #0066cc;
+                text-decoration: none;
+            }
+            .malicious-summary a:hover {
+                text-decoration: underline;
+            }
 
         </style>
     </head>
@@ -410,6 +490,21 @@ def outputHTML():
     """
     # add report timestamp
     report_timestamp = str("<h3>" + report_time + "</h3>")
+    
+    # create malicious summary section if there are any malicious entries
+    malicious_summary = ""
+    if malicious_entries:
+        malicious_summary = '<div class="malicious-summary">'
+        malicious_summary += '<h3>⚠️ MALICIOUS DETECTIONS FOUND</h3>'
+        malicious_summary += '<ul>'
+        for entry in malicious_entries:
+            vendors_list = ', '.join(entry['vendors'])
+            malicious_summary += f'<li><strong>{entry["target"]}</strong> - {entry["count"]} vendor(s) flagged as malicious: {vendors_list} '
+            malicious_summary += f'| Last Analysis: {entry["last_analysis_date"]} '
+            malicious_summary += f'<a href="{entry["report_link"]}" target="_blank">[View Full Report]</a></li>'
+        malicious_summary += '</ul></div>'
+    
+    report_timestamp = str("<h3>" + report_time + "</h3>") + malicious_summary
 
     # save html closing </ body> and </ html> tags to a variable named "footer"
     footer = """
@@ -417,26 +512,29 @@ def outputHTML():
         </html>
     """
     # create and open the new report.html file
-    text_file = open("report.html", "w")
+    text_file = open("report.html", "w", encoding='utf-8')
     text_file.write(header)
     text_file.close()
 
     # open and append report.html with the human-readable date time stored in the report_timestamp variable
-    text_file = open("report.html", "a") # append mode
+    text_file = open("report.html", "a", encoding='utf-8') # append mode
     text_file.write(report_timestamp)
     text_file.close()
 
     # open and append report.html with a single html table from urlReport(), or as an array of html tables returned by urlReportLst or urlReportIPLst
-    text_file = open("report.html", "a") # append mode
+    text_file = open("report.html", "a", encoding='utf-8') # append mode
     # iterate through the html array and write all the html tables to report.html
     for x in html:
         text_file.write(x)
     text_file.close()
 
     # open and append report.html with the closing tags stored in the footer variable
-    text_file = open("report.html", "a") # append mode
+    text_file = open("report.html", "a", encoding='utf-8') # append mode
     text_file.write(footer)
     text_file.close()
+    
+    # automatically open the report in the default web browser
+    webbrowser.open('report.html')
 
 
 # ////////////////////////////////// END OUTPUT TO HTML

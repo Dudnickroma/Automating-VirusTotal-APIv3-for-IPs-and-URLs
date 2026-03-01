@@ -32,6 +32,14 @@ import webbrowser
 #   export VT_API_KEY="your_api_key"  (bash/zsh)
 API_KEY = os.getenv("VT_API_KEY")
 
+
+def require_api_key():
+    if not API_KEY:
+        raise SystemExit(
+            "Error: VT_API_KEY is not set. Configure it as a Codespaces secret (name: VT_API_KEY) "
+            "or export it in your shell before running this script."
+        )
+
 # global list to track entries with malicious detections
 malicious_entries = []
 
@@ -88,8 +96,24 @@ def urlReport(arg):
 
     response = requests.request("GET", url, headers=headers)
 
+    if response.status_code != 200:
+        try:
+            error_response = response.json()
+            error_message = error_response.get("error", {}).get("message", response.text)
+        except ValueError:
+            error_message = response.text
+
+        raise RuntimeError(
+            f"VirusTotal API request failed for '{target_url}' with HTTP {response.status_code}: {error_message}"
+        )
+
     # load returned json from virustotal into a python dictionary called decodedResponse
     decodedResponse = json.loads(response.text)
+
+    if "data" not in decodedResponse or "attributes" not in decodedResponse["data"]:
+        raise RuntimeError(
+            f"Unexpected VirusTotal response format for '{target_url}'. Raw response: {response.text}"
+        )
 
     # grab the epoch timestamp at run time and convert to human-readable for the html report header information
     timeStamp = time.time()
@@ -542,15 +566,18 @@ args = parser.parse_args()
 
 # Check for --single-entry or -s
 if args.single_entry:
+    require_api_key()
     urlReport(args.single_entry)
     print(dataframe)
     outputHTML()
 # Check for --ip-list or -i
 elif args.ip_list:
+    require_api_key()
     urlReportIPLst(args.ip_list)
     outputHTML()
 # Check for --url-list or -u
 elif args.url_list:
+    require_api_key()
     urlReportLst(args.url_list)
     outputHTML()
 # Check for --version or -V

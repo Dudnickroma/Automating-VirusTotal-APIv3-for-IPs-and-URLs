@@ -43,12 +43,21 @@ For more information about this script, check out my article on "[Security Autom
 
 2. Install dependencies.  This script was created using Python3, and I've included a requirements.txt file listing the necessary dependencies.  More information on how to install dependencies for this project can be found in my article ["Security Automation with Python — IP address and URL analysis via VirusTotal's API v3 with HTML Reporting"](https://www.brettfullam.com/security-automation-with-python-ip-address-and-url-analysis-via-virus-totals-api-v-3-with-html-reporting/).
 
-3. You'll also need to create a .env file in the same directory as the Python script. Inside the .env file add the following code and insert your VirusTotal API key as indicated:
+3. Configure your VirusTotal API key as an environment variable named VT_API_KEY.
+
+If you are using GitHub Codespaces, add a Codespaces secret with this exact name:
+
+- Name: VT_API_KEY
+- Value: your VirusTotal API key
+
+Then restart the terminal (or rebuild the codespace) so the variable is available to the script.
+
+For local development, you can export the variable in your shell:
 
 ``` noLineNumbers
-API_KEY1=<insert your vt API key here>
+export VT_API_KEY=<insert your vt API key here>
 ```
 
-> ALWAYS remember to make sure you add ".env" to your .gitignore file to keep it from being sent to github and exposing your API key in the repository.  For more information on working with .env files, take a look at Drew Seewald's article ["Using dotenv to Hide Sensitive Information in Python--Hide your passwords and API tokens to make your code more secure"](https://towardsdatascience.com/using-dotenv-to-hide-sensitive-information-in-python-77ab9dfdaac8 "Using dotenv to Hide Sensitive Information in Python").
+> Keep API keys in secrets or environment variables, and never commit them to the repository.
 
 4. I also included 2 text files for testing both the IP address and URL lists functionality.  One for URLs, target-urls.txt, which has URLs with intentional formatting errors to test the regex pattern included in the script.  One for IP addresses, target-ips.txt, which includes a mix of public and private IP addresses, as well as a handful of improperly formatted IP addresses to test the regex patterns included in the script.

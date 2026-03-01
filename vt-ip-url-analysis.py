@@ -9,6 +9,9 @@ import base64
 import os
 import hashlib
 import webbrowser
+import subprocess
+import shutil
+from getpass import getpass
 
 
 # //////////////////////////////////////////////
@@ -30,15 +33,22 @@ import webbrowser
 # Set via GitHub Actions secret, or locally with:
 #   $env:VT_API_KEY = "your_api_key"  (PowerShell)
 #   export VT_API_KEY="your_api_key"  (bash/zsh)
-API_KEY = os.getenv("VT_API_KEY")
+API_KEY = os.getenv("VT_API_KEY", "").strip()
 
 
 def require_api_key():
+    global API_KEY
     if not API_KEY:
-        raise SystemExit(
-            "Error: VT_API_KEY is not set. Configure it as a Codespaces secret (name: VT_API_KEY) "
-            "or export it in your shell before running this script."
-        )
+        entered_api_key = getpass("Enter VirusTotal API key (input hidden): ").strip()
+        if not entered_api_key:
+            raise SystemExit(
+                "Error: No API key provided. Set VT_API_KEY or enter a key when prompted."
+            )
+        if len(entered_api_key) < 32:
+            raise SystemExit(
+                "Error: API key looks invalid. Enter a valid VirusTotal API key."
+            )
+        API_KEY = entered_api_key
 
 # global list to track entries with malicious detections
 malicious_entries = []
@@ -58,6 +68,29 @@ parser.add_argument("-V", "--version", help="show program version", action="stor
 dataframe = []
 
 report_time = ' '
+
+
+def open_report_in_browser(report_file_path):
+    report_path = Path(report_file_path).resolve()
+    report_url = report_path.as_uri()
+
+    opened = webbrowser.open_new_tab(report_url)
+    if opened:
+        print(f"Report opened: {report_url}")
+        return
+
+    browser_cmd = os.getenv("BROWSER", "").strip()
+    if browser_cmd:
+        subprocess.run(f'{browser_cmd} "{report_url}"', shell=True, check=False)
+        print(f"Report opened via $BROWSER: {report_url}")
+        return
+
+    if shutil.which("xdg-open"):
+        subprocess.run(["xdg-open", str(report_path)], check=False)
+        print(f"Report available at: {report_url}")
+        return
+
+    print(f"Report generated at: {report_url}")
 
 
 # ////////////////////////////////// START URL REPORT REQUEST
@@ -551,7 +584,7 @@ def outputHTML():
     text_file.close()
     
     # automatically open the report in the default web browser
-    webbrowser.open('report.html')
+    open_report_in_browser('report.html')
 
 
 # ////////////////////////////////// END OUTPUT TO HTML

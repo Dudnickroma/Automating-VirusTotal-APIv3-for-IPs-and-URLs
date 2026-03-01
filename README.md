@@ -39,11 +39,25 @@ For more information about this script, check out my article on "[Security Autom
 
 ## Getting Started
 
+### Quick setup in a clean Codespace
+
+Run one command from the repo root:
+
+``` noLineNumbers
+bash bootstrap.sh
+```
+
+The script installs dependencies from `requirements.txt`.
+
+If `VT_API_KEY` is not set, the Python script will now prompt you to enter your VirusTotal API key securely in the terminal (input hidden).
+
 1. Download the script or use git to clone the repository
 
 2. Install dependencies.  This script was created using Python3, and I've included a requirements.txt file listing the necessary dependencies.  More information on how to install dependencies for this project can be found in my article ["Security Automation with Python — IP address and URL analysis via VirusTotal's API v3 with HTML Reporting"](https://www.brettfullam.com/security-automation-with-python-ip-address-and-url-analysis-via-virus-totals-api-v-3-with-html-reporting/).
 
-3. Configure your VirusTotal API key as an environment variable named VT_API_KEY.
+3. Configure your VirusTotal API key as an environment variable named VT_API_KEY (optional, but recommended).
+
+If `VT_API_KEY` is not set, the script will prompt you to enter your API key securely in the terminal when it starts.
 
 If you are using GitHub Codespaces, add a Codespaces secret with this exact name:
 

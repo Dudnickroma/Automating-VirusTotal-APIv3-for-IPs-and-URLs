@@ -9,7 +9,6 @@ import base64
 import os
 import hashlib
 import webbrowser
-from dotenv import load_dotenv
 
 
 # //////////////////////////////////////////////
@@ -27,16 +26,10 @@ from dotenv import load_dotenv
 # //////////////////////////////////////////////
 
 
-# load_dotenv will look for a .env file and if it finds one it will load the environment variables from it
-load_dotenv()
-
-"""
-/////  IMPORTANT  /////
-ADD .env to gitignore to keep it from being sent to github
-and exposing your API key in the repository
-"""
-
-# retrieve API key from .env file and store in a variable
+# retrieve API key from the VT_API_KEY environment variable
+# Set via GitHub Actions secret, or locally with:
+#   $env:VT_API_KEY = "your_api_key"  (PowerShell)
+#   export VT_API_KEY="your_api_key"  (bash/zsh)
 API_KEY = os.getenv("VT_API_KEY")
 
 # global list to track entries with malicious detections
